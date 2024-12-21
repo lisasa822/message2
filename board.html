@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家庭留言板</title>
+    <style>
+        :root {
+            --dad-color: #4a90e2;
+            --mom-color: #e24a4a;
+            --child-color: #ffb6c1;
+        }
+        body {
+            margin: 0;
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #f0f2f5;
+        }
+        .board {
+            max-width: 1200px;
+            margin: 60px auto 0;
+            padding: 20px;
+            column-count: 3;
+            column-gap: 20px;
+        }
+        @media (max-width: 1200px) {
+            .board {
+                column-count: 2;
+            }
+        }
+        @media (max-width: 768px) {
+            .board {
+                column-count: 1;
+            }
+        }
+        .note {
+            break-inside: avoid;
+            background: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: relative;
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: move;
+            user-select: none;
+            padding-top: 35px;
+        }
+        .note:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .note.dad { border-left: 4px solid var(--dad-color); }
+        .note.mom { border-left: 4px solid var(--mom-color); }
+        .note.child { border-left: 4px solid var(--child-color); }
+        .note p {
+            margin: 0 0 10px 0;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+        .note img {
+            max-width: 100%;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .note audio {
+            width: 100%;
+            margin: 5px 0;
+        }
+        .add-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            width: 90%;
+            max-width: 500px;
+            margin: 50px auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        #messageText {
+            width: 100%;
+            min-height: 100px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        .modal-content button {
+            margin: 5px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+        }
+        .modal-content button:last-child {
+            background: #666;
+        }
+        .toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .note.dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+        .note.drag-over {
+            border: 2px dashed #666;
+        }
+        .note-actions {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            display: flex;
+            gap: 5px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .note:hover .note-actions {
+            opacity: 1;
+        }
+        .note-btn {
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: white;
+            transition: background-color 0.2s;
+        }
+        .edit-btn {
+            background: #4a90e2;
+        }
+        .delete-btn {
+            background: #e24a4a;
+        }
+        .edit-btn:hover {
+            background: #357abd;
+        }
+        .delete-btn:hover {
+            background: #c73333;
+        }
+        .date-divider {
+            text-align: center;
+            margin: 30px 0;
+            color: #666;
+            position: relative;
+            padding: 15px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 1.2em;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .date-divider .date {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #333;
+        }
+        .date-divider .weekday {
+            color: #666;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div>
+            <button onclick="exportData()">导出数据</button>
+            <button onclick="exportImage()">导出图片</button>
+            <input type="file" id="importFile" style="display: none" onchange="importData(event)">
+            <button onclick="document.getElementById('importFile').click()">导入数据</button>
+        </div>
+        <button onclick="logout()">退出登录</button>
+        <button onclick="clearOldMessages()">清理旧消息</button>
+    </div>
+
+    <div class="board" id="messageBoard">
+        <!-- 消息将在这里动态生成 -->
+    </div>
+
+    <button class="add-btn" onclick="showAddModal()">+</button>
+
+    <div class="modal" id="addModal">
+        <div class="modal-content">
+            <h2>添加新留言</h2>
+            <textarea id="messageText" placeholder="输入文字消息"></textarea>
+            <input type="file" accept="image/*,audio/*,*/*" multiple id="fileInput">
+            <button onclick="addMessage()">发送</button>
+            <button onclick="closeModal()">取消</button>
+        </div>
+    </div>
+
+    <script>
+        let db;
+        const dbName = "familyBoard";
+
+        // 初始化数据库
+        const request = indexedDB.open(dbName, 1);
+
+        request.onerror = function(event) {
+            console.error("数据库错误：", event.target.error);
+        };
+
+        request.onupgradeneeded = function(event) {
+            db = event.target.result;
+            if (!db.objectStoreNames.contains('messages')) {
+                db.createObjectStore('messages', { keyPath: 'timestamp' });
+            }
+        };
+
+        request.onsuccess = function(event) {
+            db = event.target.result;
+            loadMessages(); // 加载消息
+        };
+
+        // 加载消息
+        async function loadMessages() {
+            try {
+                const transaction = db.transaction(['messages'], 'readonly');
+                const store = transaction.objectStore('messages');
+                const request = store.getAll();
+
+                request.onsuccess = function() {
+                    messages = request.result || [];
+                    // 尝试合并 localStorage 中的新消息
+                    const localMessages = JSON.parse(localStorage.getItem('messages')) || [];
+                    
+                    // 合并消息并去重
+                    const allMessages = [...messages, ...localMessages];
+                    messages = Array.from(new Map(allMessages.map(msg => 
+                        [msg.timestamp, msg]
+                    )).values());
+                    
+                    // 按时间排序
+                    messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    
+                    renderMessages();
+                };
+            } catch (e) {
+                console.error('加载消息失败：', e);
+                // 如果数据库访问失败，回退到 localStorage
+                messages = JSON.parse(localStorage.getItem('messages')) || [];
+                renderMessages();
+            }
+        }
+
+        let messages = JSON.parse(localStorage.getItem('messages')) || [];
+        const userRole = localStorage.getItem('userRole');
+
+        if (!userRole) {
+            window.location.href = 'login.html';
+        }
+
+        function showAddModal() {
+            document.getElementById('addModal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('addModal').style.display = 'none';
+        }
+
+        // 添加图片压缩函数
+        function compressImage(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        // 如果图片太大，按比例缩小
+                        const MAX_WIDTH = 1024;
+                        const MAX_HEIGHT = 1024;
+                        
+                        if (width > height) {
+                            if (width > MAX_WIDTH) {
+                                height *= MAX_WIDTH / width;
+                                width = MAX_WIDTH;
+                            }
+                        } else {
+                            if (height > MAX_HEIGHT) {
+                                width *= MAX_HEIGHT / height;
+                                height = MAX_HEIGHT;
+                            }
+                        }
+                        
+                        canvas.width = width;
+                        canvas.height = height;
+                        
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // 压缩图片质量
+                        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                        resolve(compressedDataUrl);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 修改文件处理部分
+        function handleFile(file) {
+            if (file.type.startsWith('image/')) {
+                return compressImage(file);
+            } else {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.readAsDataURL(file);
+                });
+            }
+        }
+
+        // 修改 addMessage 函数
+        async function addMessage() {
+            const text = document.getElementById('messageText').value;
+            const files = document.getElementById('fileInput').files;
+            const message = {
+                text: text,
+                role: userRole,
+                timestamp: new Date().toISOString(),
+                files: []
+            };
+
+            // 处理所有文件
+            for (let file of files) {
+                const data = await handleFile(file);
+                message.files.push({
+                    type: file.type,
+                    data: data
+                });
+            }
+
+            try {
+                // 同时使用 IndexedDB 和 localStorage
+                const transaction = db.transaction(['messages'], 'readwrite');
+                const store = transaction.objectStore('messages');
+                await store.add(message);
+
+                messages.push(message);
+                localStorage.setItem('messages', JSON.stringify(messages));
+                
+                renderMessages();
+                closeModal();
+                document.getElementById('messageText').value = '';
+                document.getElementById('fileInput').value = '';
+            } catch (e) {
+                if (e.name === 'QuotaExceededError') {
+                    alert('本地存储空间已满，正在切换到数据库存储');
+                    // 当 localStorage 满时，只使用 IndexedDB
+                    const transaction = db.transaction(['messages'], 'readwrite');
+                    const store = transaction.objectStore('messages');
+                    await store.add(message);
+                    
+                    // 清理 localStorage
+                    messages = messages.slice(-20); // 只保留最新的20条消息在 localStorage
+                    localStorage.setItem('messages', JSON.stringify(messages));
+                    
+                    loadMessages(); // 重新从数据库加载所有消息
+                } else {
+                    alert('保存失败：' + e.message);
+                }
+            }
+        }
+
+        function renderMessages() {
+            const board = document.getElementById('messageBoard');
+            board.innerHTML = '';
+            
+            // 按日期分组消息
+            const messagesByDate = {};
+            messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                .forEach(message => {
+                    const messageDate = new Date(message.timestamp).toLocaleDateString();
+                    if (!messagesByDate[messageDate]) {
+                        messagesByDate[messageDate] = [];
+                    }
+                    messagesByDate[messageDate].push(message);
+                });
+            
+            // 渲染分组后的消息
+            Object.entries(messagesByDate).forEach(([date, dateMessages]) => {
+                const dateGroup = document.createElement('div');
+                dateGroup.className = 'date-group';
+                
+                // 创建日期对象以获取星期几
+                const dateObj = new Date(dateMessages[0].timestamp);
+                const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+                const weekday = weekdays[dateObj.getDay()];
+                
+                // 添加日期分割线
+                dateGroup.innerHTML = `
+                    <div class="date-divider">
+                        <span class="date">${date}</span>
+                        <span class="weekday">${weekday}</span>
+                    </div>
+                `;
+                
+                // 添加该日期下的所有消息
+                dateMessages.forEach(message => {
+                    const noteElement = document.createElement('div');
+                    noteElement.className = `note ${message.role}`;
+                    noteElement.draggable = true;
+                    noteElement.dataset.timestamp = message.timestamp;
+                    noteElement.innerHTML = `
+                        <div class="note-actions">
+                            <button class="note-btn edit-btn" onclick="editMessage('${message.timestamp}')">编辑</button>
+                            <button class="note-btn delete-btn" onclick="deleteMessage('${message.timestamp}')">删除</button>
+                        </div>
+                        <p>${message.text}</p>
+                        ${message.files.map(file => {
+                            if (file.type.startsWith('image/')) {
+                                return `<img src="${file.data}" style="max-width: 100%">`;
+                            } else if (file.type.startsWith('audio/')) {
+                                return `<audio controls src="${file.data}"></audio>`;
+                            } else {
+                                return `<a href="${file.data}" download>下载文件</a>`;
+                            }
+                        }).join('')}
+                    `;
+
+                    // 添加拖拽事件监听器
+                    noteElement.addEventListener('dragstart', handleDragStart);
+                    noteElement.addEventListener('dragend', handleDragEnd);
+                    noteElement.addEventListener('dragover', handleDragOver);
+                    noteElement.addEventListener('drop', handleDrop);
+                    noteElement.addEventListener('dragenter', handleDragEnter);
+                    noteElement.addEventListener('dragleave', handleDragLeave);
+
+                    dateGroup.appendChild(noteElement);
+                });
+                
+                board.appendChild(dateGroup);
+            });
+        }
+
+        // 修改导出数据功能
+        function exportData() {
+            // 确保导出所有数据
+            const transaction = db.transaction(['messages'], 'readonly');
+            const store = transaction.objectStore('messages');
+            const request = store.getAll();
+
+            request.onsuccess = function() {
+                const dbMessages = request.result || [];
+                const localMessages = JSON.parse(localStorage.getItem('messages')) || [];
+                
+                // 合并并去重
+                const allMessages = Array.from(new Map(
+                    [...dbMessages, ...localMessages].map(msg => [msg.timestamp, msg])
+                ).values());
+                
+                // 导出
+                const data = JSON.stringify(allMessages);
+                const blob = new Blob([data], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = '家庭留言板数据.json';
+                a.click();
+            };
+        }
+
+        // 修改导入数据功能
+        async function importData(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const importedMessages = JSON.parse(e.target.result);
+                    
+                    // 清空现有数据
+                    const transaction = db.transaction(['messages'], 'readwrite');
+                    const store = transaction.objectStore('messages');
+                    await store.clear();
+                    
+                    // 导入到 IndexedDB
+                    for (const msg of importedMessages) {
+                        await store.add(msg);
+                    }
+                    
+                    // 更新 localStorage
+                    messages = importedMessages.slice(-20); // 只保留最新的20条在 localStorage
+                    localStorage.setItem('messages', JSON.stringify(messages));
+                    
+                    loadMessages();
+                    alert('数据导入成功！');
+                } catch (e) {
+                    alert('导入失败：' + e.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function exportImage() {
+            html2canvas(document.getElementById('messageBoard')).then(canvas => {
+                const url = canvas.toDataURL();
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = '家庭留言板截图.png';
+                a.click();
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('userRole');
+            window.location.href = 'login.html';
+        }
+
+        // 修改清理消息功能
+        async function clearOldMessages() {
+            if (confirm('是否清理一周前的旧消息？')) {
+                const oneWeekAgo = new Date();
+                oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+                
+                try {
+                    // 清理 IndexedDB
+                    const transaction = db.transaction(['messages'], 'readwrite');
+                    const store = transaction.objectStore('messages');
+                    const request = store.getAll();
+                    
+                    request.onsuccess = function() {
+                        const dbMessages = request.result || [];
+                        const newMessages = dbMessages.filter(msg => 
+                            new Date(msg.timestamp) > oneWeekAgo
+                        );
+                        
+                        // 清空并重新添加筛选后的消息
+                        store.clear();
+                        newMessages.forEach(msg => store.add(msg));
+                        
+                        // 更新 localStorage
+                        messages = newMessages.slice(-20);
+                        localStorage.setItem('messages', JSON.stringify(messages));
+                        
+                        renderMessages();
+                        alert('清理完成');
+                    };
+                } catch (e) {
+                    alert('清理失败：' + e.message);
+                }
+            }
+        }
+
+        // 初始化显示
+        renderMessages();
+
+        let draggedElement = null;
+
+        function handleDragStart(e) {
+            draggedElement = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.dataset.timestamp);
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            document.querySelectorAll('.note').forEach(note => {
+                note.classList.remove('drag-over');
+            });
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            return false;
+        }
+
+        function handleDragEnter(e) {
+            this.classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.stopPropagation();
+            e.preventDefault();
+
+            if (draggedElement !== this) {
+                const draggedTimestamp = draggedElement.dataset.timestamp;
+                const dropTimestamp = this.dataset.timestamp;
+
+                // 在数组中找到对应的消息
+                const draggedMsg = messages.find(m => m.timestamp === draggedTimestamp);
+                const dropMsg = messages.find(m => m.timestamp === dropTimestamp);
+
+                if (draggedMsg && dropMsg) {
+                    // 交换两条消息的时间戳
+                    const tempTimestamp = draggedMsg.timestamp;
+                    draggedMsg.timestamp = dropMsg.timestamp;
+                    dropMsg.timestamp = tempTimestamp;
+
+                    // 更新存储
+                    try {
+                        const transaction = db.transaction(['messages'], 'readwrite');
+                        const store = transaction.objectStore('messages');
+                        store.put(draggedMsg);
+                        store.put(dropMsg);
+                        localStorage.setItem('messages', JSON.stringify(messages));
+                    } catch (e) {
+                        console.error('更新消息顺序失败：', e);
+                    }
+
+                    // 重新渲染消息列表
+                    renderMessages();
+                }
+            }
+
+            return false;
+        }
+
+        function deleteMessage(timestamp) {
+            if (confirm('确定要删除这条留言吗？')) {
+                try {
+                    // 从 IndexedDB 中删除
+                    const transaction = db.transaction(['messages'], 'readwrite');
+                    const store = transaction.objectStore('messages');
+                    store.delete(timestamp);
+
+                    // 从内存中删除
+                    messages = messages.filter(msg => msg.timestamp !== timestamp);
+                    
+                    // 更新 localStorage
+                    localStorage.setItem('messages', JSON.stringify(messages));
+                    
+                    // 重新渲染
+                    renderMessages();
+                } catch (e) {
+                    console.error('删除失败：', e);
+                    alert('删除失败：' + e.message);
+                }
+            }
+        }
+
+        function editMessage(timestamp) {
+            const message = messages.find(msg => msg.timestamp === timestamp);
+            if (!message) return;
+
+            // 显示编辑模态框
+            const modal = document.getElementById('addModal');
+            const messageText = document.getElementById('messageText');
+            modal.style.display = 'block';
+            messageText.value = message.text;
+
+            // 修改发送按钮的行为
+            const sendButton = modal.querySelector('button');
+            const originalOnClick = sendButton.onclick;
+            sendButton.onclick = async function() {
+                try {
+                    // 保存原有的文件
+                    const updatedMessage = {
+                        ...message,
+                        text: messageText.value,
+                        files: [...message.files] // 保留原有文件
+                    };
+
+                    // 处理新上传的文件
+                    const files = document.getElementById('fileInput').files;
+                    for (let file of files) {
+                        const data = await handleFile(file);
+                        updatedMessage.files.push({
+                            type: file.type,
+                            data: data
+                        });
+                    }
+
+                    // 更新 IndexedDB
+                    const transaction = db.transaction(['messages'], 'readwrite');
+                    const store = transaction.objectStore('messages');
+                    await store.put(updatedMessage);
+
+                    // 更新内存中的消息
+                    const index = messages.findIndex(msg => msg.timestamp === timestamp);
+                    if (index !== -1) {
+                        messages[index] = updatedMessage;
+                    }
+
+                    // 更新 localStorage
+                    localStorage.setItem('messages', JSON.stringify(messages));
+
+                    // 重新渲染并关闭模态框
+                    renderMessages();
+                    closeModal();
+
+                    // 恢复发送按钮的原始行为
+                    sendButton.onclick = originalOnClick;
+                } catch (e) {
+                    console.error('更新失败：', e);
+                    alert('更新失败：' + e.message);
+                }
+            };
+        }
+    </script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+</body>
+</html> 
